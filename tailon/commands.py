@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+import getpass
 from . import compat
 
 from tornado import process
@@ -15,6 +16,7 @@ class ToolPaths:
     command_names = {'grep', 'awk', 'sed', 'tail'}
 
     def __init__(self, overwrites=None):
+        self.cmd_ssh = self.first_in_path('ssh')
         self.cmd_grep = self.first_in_path('grep')
         self.cmd_awk  = self.first_in_path('gawk', 'awk')
         self.cmd_sed  = self.first_in_path('gsed', 'sed')
@@ -65,6 +67,17 @@ class CommandControl:
     def tail(self, n, fn, stdout, stderr, **kw):
         flag_follow = '-F' if self.follow_names else '-f'
         cmd = [self.toolpaths.cmd_tail, '-n', str(n), flag_follow, fn]
+        host = kw.get('host', 'localhost')
+        if not host in ('localhost', '127.0.0.1'):
+            login_user = kw.get('login_user', getpass.getuser())
+            ssh_key = kw.get('ssh_key', '~/.ssh/id_rsa')
+            ssh_cmd = [self.toolpaths.cmd_ssh, 
+                        '-l', login_user,
+                        '-i', ssh_key,
+                        '-o', 'UserKnownHostsFile=/dev/null', 
+                        '-o', 'StrictHostKeyChecking=no', 
+                        '-o', 'LogLevel=QUIET', host]
+            cmd = ssh_cmd + cmd
         proc = process.Subprocess(cmd, stdout=stdout, stderr=stderr, bufsize=1, **kw)
         log.debug('running tail %s, pid: %s', cmd, proc.proc.pid)
         return proc
